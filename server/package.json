@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Backend server for Copy Post It",
   "main": "index.js",
+  "prisma": {
+    "schema": "../prisma/schema.prisma"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
