@@ -3,7 +3,7 @@ services:
     name: copy-post-it-api
     env: node
     plan: free
-    buildCommand: npm install && cd server && npm install && cd .. && npx prisma generate && npx prisma db push
+    buildCommand: npm install && cd server && npm install && cd .. && npx prisma generate --schema=./prisma/schema.prisma && npx prisma db push --schema=./prisma/schema.prisma
     startCommand: cd server && node index.js
     envVars:
       - key: DATABASE_URL
