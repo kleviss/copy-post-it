@@ -18,29 +18,98 @@ const app = express();
 // Middleware - CORS configuration
 const allowedOrigins = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",").map((url) => url.trim()) : ["http://localhost:3000"];
 
+// Add common production origins if not already included
+if (process.env.NODE_ENV === "production") {
+  const vercelOrigin = "https://copy-post-it.vercel.app";
+  if (!allowedOrigins.includes(vercelOrigin)) {
+    allowedOrigins.push(vercelOrigin);
+  }
+}
+
+console.log("🌐 Allowed CORS origins:", allowedOrigins);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
+      if (!origin) {
+        console.log("⚠️  Request with no origin header");
+        return callback(null, true);
+      }
+
+      console.log(`🔍 CORS check - Origin: ${origin}, Allowed: ${allowedOrigins.includes(origin)}`);
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.error(`❌ CORS blocked - Origin: ${origin} not in allowed list`);
         callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Content-Type"],
   })
 );
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, "../uploads");
 const invoicesDir = path.join(__dirname, "../invoices");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true });
+
+// Serve static files with proper error handling and security
+app.use("/uploads", (req, res, next) => {
+  // Sanitize path to prevent directory traversal
+  const fileName = path.basename(req.path);
+  const filePath = path.join(uploadsDir, fileName);
+
+  // Ensure the resolved path is within the uploads directory
+  const resolvedPath = path.resolve(filePath);
+  const resolvedDir = path.resolve(uploadsDir);
+
+  if (!resolvedPath.startsWith(resolvedDir)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  if (fs.existsSync(filePath)) {
+    res.setHeader("Content-Type", "application/pdf");
+    res.sendFile(filePath);
+  } else {
+    console.error(`❌ File not found: ${filePath}`);
+    res.status(404).json({
+      error: "File not found",
+      message: "The requested file does not exist on the server.",
+    });
+  }
+});
+
+app.use("/invoices", (req, res, next) => {
+  // Sanitize path to prevent directory traversal
+  const fileName = path.basename(req.path);
+  const filePath = path.join(invoicesDir, fileName);
+
+  // Ensure the resolved path is within the invoices directory
+  const resolvedPath = path.resolve(filePath);
+  const resolvedDir = path.resolve(invoicesDir);
+
+  if (!resolvedPath.startsWith(resolvedDir)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  if (fs.existsSync(filePath)) {
+    res.setHeader("Content-Type", "application/pdf");
+    res.sendFile(filePath);
+  } else {
+    console.error(`❌ Invoice not found: ${filePath}`);
+    res.status(404).json({
+      error: "Invoice not found",
+      message: "The requested invoice does not exist on the server.",
+    });
+  }
+});
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -232,6 +301,9 @@ app.get("/", (req, res) => {
         login: "POST /api/auth/login",
         me: "GET /api/auth/me (requires authentication)",
       },
+      admin: {
+        create: "POST /api/admin/create (requires ADMIN_SECRET_KEY)",
+      },
       requests: {
         create: "POST /api/requests (requires authentication)",
         list: "GET /api/requests (requires authentication)",
@@ -310,6 +382,56 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
     res.json({ user });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch user" });
+  }
+});
+
+// Admin creation endpoint (protected by secret key)
+app.post("/api/admin/create", async (req, res) => {
+  try {
+    const { email, password, name, secretKey } = req.body;
+
+    // Verify secret key
+    const adminSecret = process.env.ADMIN_SECRET_KEY;
+    if (!adminSecret) {
+      console.error("❌ ADMIN_SECRET_KEY not configured");
+      return res.status(500).json({ error: "Admin creation not configured" });
+    }
+
+    if (secretKey !== adminSecret) {
+      console.error("❌ Invalid admin secret key attempt");
+      return res.status(403).json({ error: "Invalid secret key" });
+    }
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: "User with this email already exists" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const admin = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: "admin",
+        name: name || null,
+      },
+    });
+
+    console.log("✅ Admin user created:", { id: admin.id, email: admin.email });
+
+    res.json({
+      success: true,
+      message: "Admin user created successfully",
+      user: { id: admin.id, email: admin.email, name: admin.name, role: admin.role },
+    });
+  } catch (error) {
+    console.error("Admin creation error:", error);
+    res.status(500).json({ error: "Failed to create admin user" });
   }
 });
 
@@ -470,8 +592,7 @@ app.patch("/api/requests/:id/status", authenticateToken, requireAdmin, async (re
   }
 });
 
-// Serve invoice files
-app.use("/invoices", express.static(invoicesDir));
+// Invoice files are served above with the static middleware
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
