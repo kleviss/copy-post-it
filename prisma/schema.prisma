@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  passwordHash  String
+  name          String?
+  role          String        @default("user") // 'user' or 'admin'
+  requests      PrintRequest[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model PrintRequest {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pdfUrl        String
+  pdfFileName   String
+  pageCount     Int
+  postingCost   Float
+  systemFee     Float       @default(1.0) // always 1.0
+  printCost     Float       // pages * 0.5
+  totalCost     Float
+  status        String      @default("submitted") // submitted, in progress, posted, paid
+  invoiceUrl    String?
+  statusLogs    StatusLog[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model StatusLog {
+  id            String       @id @default(cuid())
+  requestId     String
+  request       PrintRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  oldStatus     String?
+  newStatus     String
+  changedBy     String?      // admin user ID
+  createdAt     DateTime     @default(now())
+}
+

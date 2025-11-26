@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: copy-post-it-api
+    env: node
+    plan: free
+    buildCommand: npm install && cd server && npm install && cd .. && npx prisma generate && npx prisma db push
+    startCommand: cd server && node index.js
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: copy-post-it-db
+    plan: free
+    databaseName: copy_post_it
+    user: copy_post_it_user
+
