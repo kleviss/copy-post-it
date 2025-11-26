@@ -13,6 +13,9 @@ interface PrintRequest {
   id: string;
   pdfFileName: string;
   pageCount: number;
+  postingCost: number;
+  systemFee: number;
+  printCost: number;
   totalCost: number;
   status: string;
   invoiceUrl: string | null;
