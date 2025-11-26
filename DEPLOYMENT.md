@@ -40,6 +40,10 @@ This guide provides step-by-step instructions for deploying the Copy Post It app
    - **Root Directory**: Leave empty (we'll handle this in build command)
    - **Build Command**: 
      ```bash
+     cd server && npm install && npx prisma generate --schema=../prisma/schema.prisma && npx prisma db push --schema=../prisma/schema.prisma
+     ```
+     **Alternative (from root):**
+     ```bash
      npm install && cd server && npm install && cd .. && npx prisma generate --schema=./prisma/schema.prisma && npx prisma db push --schema=./prisma/schema.prisma
      ```
    - **Start Command**: 
